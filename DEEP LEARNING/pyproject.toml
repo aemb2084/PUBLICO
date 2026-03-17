@@ -3,4 +3,17 @@ name = "deep-learning"
 version = "0.1.0"
 description = "Add your description here"
 requires-python = ">=3.10"
-dependencies = []
+dependencies = [
+    "chardet>=7.1.0",
+    "gdown>=5.2.1",
+    "ipykernel>=7.2.0",
+    "pandas>=2.3.3",
+    "pydantic-settings>=2.13.1",
+    "python-dotenv>=1.2.2",
+    "pytorch-lightning>=2.6.1",
+    "scikit-learn>=1.7.2",
+    "seaborn>=0.13.2",
+    "torch>=2.10.0",
+    "tqdm>=4.67.3",
+    "transformers>=5.3.0",
+]
