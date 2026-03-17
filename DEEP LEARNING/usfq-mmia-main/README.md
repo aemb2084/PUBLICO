@@ -14,19 +14,4 @@ curl -Ls https://astral.sh/uv/install.sh | sh
 uv sync
  ```
  ## Contents
-- `cnns` : Convolutional Neural Networks notebooks.
-
-## Specifics
-- To run the crnn notebook without warnings the ffmpeg library must be installed. On Linux, this can be done with:
-```bash
-sudo apt-get install ffmpeg
-```
-Or manually without using sudo:
-```bash
-wget https://johnvansickle.com/ffmpeg/builds/ffmpeg-git-amd64-static.tar.xz
-tar xvf ffmpeg-git-amd64-static.tar.xz
-cd ffmpeg-*-static
-mv ffmpeg ffprobe ~/bin/
-export PATH="$HOME/bin:$PATH"
-source ~/.bashrc
-```
+- `attention` : Convolutional Neural Networks notebooks.
