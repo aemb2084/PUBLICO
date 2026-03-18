@@ -1,0 +1,250 @@
+\documentclass[conference]{IEEEtran}
+
+\usepackage[utf8]{inputenc}
+\usepackage[T1]{fontenc}
+\usepackage[T1]{fontenc}
+\usepackage{amsmath}
+\usepackage{booktabs}
+\usepackage{hyperref}
+\usepackage{graphicx}
+\usepackage{array}
+\usepackage{microtype}
+
+\hypersetup{
+  colorlinks=true,
+  linkcolor=blue,
+  citecolor=blue,
+  urlcolor=blue
+}
+
+% -------------------------------------------------------
+\begin{document}
+
+\title{Clasificación Automática de Preguntas sobre OEE\\
+mediante Fine-Tuning de BERT en Español}
+
+\author{
+  \IEEEauthorblockN{E. Manosalvas}
+  \IEEEauthorblockA{
+    Maestría en Inteligencia Artificial\\
+    Universidad San Francisco de Quito\\
+    Quito, Ecuador\\
+    \textit{emanosalvasb@estud.usfq.edu.ec}
+  }
+}
+
+\maketitle
+
+% -------------------------------------------------------
+\begin{abstract}
+Este artículo presenta el desarrollo y evaluación de un sistema de clasificación
+automática de preguntas técnicas sobre el indicador de Efectividad Global del Equipo (OEE).
+Se empleó el modelo BERT preentrenado en español
+(\texttt{dccuchile/bert-base-spanish-wwm-cased}) como encoder contextual congelado,
+combinado con una cabeza de clasificación lineal entrenada mediante fine-tuning
+sobre un dataset balanceado de 524 preguntas en cuatro categorías:
+\textit{calidad}, \textit{velocidad}, \textit{rendimiento} y \textit{eficiencia OEE}.
+El modelo alcanzó una exactitud del 90.57\,\% en prueba y 92.31\,\% en validación,
+con un F1-score macro de 0.921, demostrando la viabilidad de aplicar PLMs
+al dominio industrial en idioma español.
+\end{abstract}
+
+\begin{IEEEkeywords}
+BERT, clasificación de texto, OEE, procesamiento de lenguaje natural,
+PyTorch Lightning, transfer learning, manufactura.
+\end{IEEEkeywords}
+
+% -------------------------------------------------------
+\section{Introducción}
+
+La Efectividad Global del Equipo (OEE) integra tres dimensiones clave del
+desempeño productivo: disponibilidad, rendimiento de velocidad y calidad.
+Diagnosticar cada dimensión a través de preguntas técnicas especializadas
+es fundamental para sistemas de soporte de decisiones en manufactura.
+
+Con la consolidación de los modelos de lenguaje preentrenados (PLMs) —en
+particular BERT \cite{devlin2019bert}— se abrió la posibilidad de adaptar
+representaciones contextuales a tareas de clasificación en dominios
+especializados con datos reducidos. Sin embargo, la mayoría de los estudios
+se desarrollan en inglés. Para el español, BETO \cite{canete2020spanish}
+representa el estado del arte, pero su aplicación al dominio industrial del
+OEE aún es limitada.
+
+Este trabajo contribuye con: (1) un dataset balanceado de 524 preguntas
+OEE en español; (2) un clasificador BERT+cabeza lineal entrenado con
+PyTorch Lightning; y (3) una evaluación cuantitativa detallada por clase.
+
+% -------------------------------------------------------
+\section{Metodología}
+
+\subsection{Dataset}
+
+El ddataset consta de 524 preguntas técnicas en español distribuidas
+de forma balanceada en cuatro clases de etiqueta única (\textit{single-label}),
+con 131 ejemplos por clase (Tabla~\ref{tab:dataset}).
+El dataset fue generado sintéticamente para cubrir el espacio semántico de cada
+categoría. Una versión preliminar con esquema multi-label presentaba fuerte
+solapamiento entre etiquetas, induciendo sesgo hacia la clase \textit{velocidad};
+la transición a single-label balanceado corrigió este problema.
+La partición se realizó en entrenamiento (80\,\%), validación (10\,\%) y
+prueba (10\,\%) con semilla fija (\texttt{RANDOM\_SEED=42}).
+
+\begin{table}[h]
+\centering
+\caption{Distribución del dataset por clase y partición}
+\label{tab:dataset}
+\begin{tabular}{lcccc}
+\toprule
+\textbf{Clase} & \textbf{Total} & \textbf{Train} & \textbf{Val} & \textbf{Test} \\
+\midrule
+calidad        & 131 & 105 & 13 & 13 \\
+velocidad      & 131 & 105 & 13 & 13 \\
+rendimiento    & 131 & 105 & 13 & 13 \\
+eficiencia OEE & 131 & 103 & 13 & 15 \\
+\midrule
+\textbf{Total} & \textbf{524} & \textbf{418} & \textbf{52} & \textbf{54} \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+\subsection{Arquitectura del Modelo}
+
+El modelo sigue la estrategia de \textit{feature extraction}: el encoder
+BERT-base en español (${\sim}109$\,M parámetros) se mantiene congelado en
+modo \texttt{eval}, actuando exclusivamente como extractor de representaciones
+contextuales. Sobre el vector del token \texttt{[CLS]} se añade una
+cabeza lineal \texttt{Sequential} ($768\!\to\!4$, Dropout 0.1) con
+3\,072 parámetros entrenables y \texttt{CrossEntropyLoss} como función
+de pérdida. Esta decisión responde al tamaño moderado del dataset, donde
+el fine-tuning completo del encoder sería propenso al sobreajuste.
+
+\subsection{Entrenamiento}
+
+El entrenamiento fue orquestado con PyTorch Lightning. Los principales
+hiperparámetros se resumen en la Tabla~\ref{tab:hyper}. Se empleó
+Early Stopping con paciencia de 5 épocas monitoreando
+\texttt{val\_loss}, lo que detuvo el entrenamiento en la época 14
+(checkpoint óptimo en época 13). El entrenamiento se ejecutó en GPU NVIDIA
+con soporte CUDA.
+
+\begin{table}[h]
+\centering
+\caption{Hiperparámetros de entrenamiento}
+\label{tab:hyper}
+\begin{tabular}{ll}
+\toprule
+\textbf{Hiperparámetro} & \textbf{Valor} \\
+\midrule
+Encoder            & bert-base-spanish-wwm-cased \\
+Optimizador        & AdamW, lr $= 2\times10^{-5}$ \\
+Scheduler          & Linear warmup (20\,\% pasos) \\
+Batch size         & 32 \\
+Max tokens         & 512 \\
+Max épocas         & 50 (Early Stop: 5) \\
+Pérdida            & CrossEntropyLoss \\
+Dropout            & 0.1 \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+% -------------------------------------------------------
+\section{Resultados y Discusión}
+
+\subsection{Métricas Globales}
+
+El modelo alcanzó una exactitud de \textbf{90.57\,\%} en prueba y
+\textbf{92.31\,\%} en validación, convergiendo en apenas 14 épocas.
+Estos resultados son notables considerando que solo 3\,072 parámetros
+fueron actualizados, lo que evidencia la potencia de las representaciones
+contextuales de BERT para capturar diferencias semánticas en dominio
+técnico especializado (Tabla~\ref{tab:global}).
+
+\begin{table}[h]
+\centering
+\caption{Métricas globales en validación y prueba}
+\label{tab:global}
+\begin{tabular}{lcc}
+\toprule
+\textbf{Métrica} & \textbf{Validación} & \textbf{Prueba} \\
+\midrule
+Exactitud        & 92.31\,\% & 90.57\,\% \\
+Pérdida (Loss)   & 0.4613    & 0.3656    \\
+F1-score macro   & 0.9209    & ---       \\
+F1-score ponderado & 0.9231  & ---       \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+\subsection{Reporte por Clase}
+
+La Tabla~\ref{tab:report} muestra el reporte de clasificación en validación
+usando argmax. La clase \textit{calidad} obtiene precisión perfecta (1.000)
+pero recall de 0.857, indicando que algunos ejemplos son asignados a otras
+categorías. Por el contrario, \textit{eficiencia OEE} logra recall perfecto
+(1.000) con precisión 0.857, sugiriendo tendencia a clasificar ejemplos limítrofes
+en esta clase. La clase \textit{rendimiento} alcanza el F1 más alto (0.9375),
+reflejando que sus representaciones BERT son las más discriminativas. Estos
+resultados son consistentes con la literatura en clasificación de dominio
+específico en español con BERT \cite{canete2020spanish}, donde se reportan
+F1-scores de $0.89$--$0.95$.
+
+\begin{table}[h]
+\centering
+\caption{Reporte de clasificación por clase — Validación (argmax)}
+\label{tab:report}
+\begin{tabular}{lcccc}
+\toprule
+\textbf{Clase} & \textbf{Prec.} & \textbf{Rec.} & \textbf{F1} & \textbf{Sup.} \\
+\midrule
+calidad        & 1.0000 & 0.8571 & 0.9231 & 14 \\
+velocidad      & 0.9000 & 0.9000 & 0.9000 & 10 \\
+rendimiento    & 0.9375 & 0.9375 & 0.9375 & 16 \\
+eficiencia OEE & 0.8571 & 1.0000 & 0.9231 & 12 \\
+\midrule
+macro avg      & 0.9237 & 0.9237 & 0.9209 & 52 \\
+weighted avg   & 0.9286 & 0.9231 & 0.9231 & 52 \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+% -------------------------------------------------------
+\section{Conclusiones}
+
+Se demostró que un clasificador BERT con encoder congelado y cabeza lineal
+alcanza resultados competitivos (test acc. 90.57\,\%, F1 macro 0.921) para
+clasificar preguntas técnicas sobre OEE en español, entrenando únicamente
+3\,072 parámetros. La transición de multi-label a single-label balanceado
+fue determinante para eliminar sesgos sistemáticos en la predicción.
+
+Entre las limitaciones destacan el uso de datos sintéticos y el tamaño
+moderado del dataset. Como trabajo futuro se propone: ampliar el dataset con
+preguntas reales de operadores; explorar fine-tuning completo con LoRA
+\cite{hu2022lora}; e integrar el clasificador en un sistema QA para
+entornos de manufactura reales.
+
+% -------------------------------------------------------
+\begin{thebibliography}{1}
+
+\bibitem{devlin2019bert}
+J.~Devlin, M.-W. Chang, K.~Lee, and K.~Toutanova,
+``BERT: Pre-training of deep bidirectional transformers for language understanding,''
+in \textit{Proc. NAACL-HLT}, Minneapolis, MN, USA, 2019, pp. 4171--4186.
+
+\bibitem{canete2020spanish}
+J.~Cañete, G.~Chaperon, R.~Fuentes, J.-H.~Ho, H.~Kang, and J.~Pérez,
+``Spanish pre-trained BERT model and evaluation data,''
+in \textit{PML4DC Workshop at ICLR}, 2020.
+
+\bibitem{vaswani2017attention}
+A.~Vaswani \textit{et al.},
+``Attention is all you need,''
+in \textit{Advances in Neural Information Processing Systems}, vol.~30, 2017.
+
+\bibitem{hu2022lora}
+E.~Hu \textit{et al.},
+``LoRA: Low-rank adaptation of large language models,''
+in \textit{Proc. ICLR}, 2022.
+
+\end{thebibliography}
+
+\end{document}
